@@ -1,249 +1,180 @@
-$(document).ready(function () {
-    // On click make search of city
-    $('#getEnteredCityWeather,#past-searches').on('click', function () {
-        let clickEvent = $(event.target)[0];
-        let location = "";
-        if (clickEvent.id === "getEnteredCityWeather") {
-            location = $('#cityEntered').val().trim().toUpperCase();
-        } else if (clickEvent.className === ("cityList")) {
-            location = clickEvent.innerText;
-        }
-        if (location == "") return;
-        // updates local storage with city search made by user
-        updateLocalStorage(location);
-        // get current weather for searched location
-        getCurrentWeather(location);
-        // get forecast for searched location
-        getWeatherForecast(location);
-    });
-    // Convert Unix timestamp to MMM DD, YYYY
-    function convertDate(UNIXtimestamp) {
-        let convertedDate = "";
-        let a = new Date(UNIXtimestamp * 1000);
-        let months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        let year = a.getFullYear();
-        let month = months[a.getMonth()];
-        let date = a.getDate();
-        convertedDate = month + ' ' + date + ', ' + year;
-        return convertedDate;
-    }
-    function updateLocalStorage(location) {
-        // updates City in local storage
-        let cityList = JSON.parse(localStorage.getItem("cityList")) || [];
-        cityList.push(location);
-        cityList.sort();
-        // removes city from saved search if it has already been searched for
-        for (let i = 1; i < cityList.length; i++) {
-            if (cityList[i] === cityList[i - 1]) cityList.splice(i, 1);
-        }
-        //stores in local storage
-        localStorage.setItem('cityList', JSON.stringify(cityList));
-        $('#cityEntered').val("");
-    }
-    // Get current user location
-    function establishCurrLocation() {
-        // set location to null
-        let location = {};
-        // get longitude and latitude
-        function success(position) {
-            location = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                success: true
+// array to hold the user search history
+let searchHistory = []
+let lastCitySearched = ""
+
+// api call to openweathermap.org
+let getCityWeather = function(city) {
+    // format the OpenWeather api url
+    let apiUrl = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&appid=314c9841e6dc7de0c4fa4dbcf98d890d&units=metric";
+
+    // make a request to the url
+    fetch(apiUrl)
+        
+        .then(function(response) {
+        // request was successful
+            if (response.ok) {
+                response.json().then(function(data) {
+                    displayWeather(data);
+                });
+            // request fails
+            } else {
+                alert("Error: " + response.statusText);
             }
-            // Get current conditions for current location
-            getCurrentWeather(location);
-            // Get forecast for local conditions
-            getWeatherForecast(location);
-        }
-        function error() {
-            location = { success: false }
-            return location;
-        }
-        // console.log if browswer doesn't support location
-        if (!navigator.geolocation) {
-            console.log('Geolocation is not supported by your browser');
-        } else {
-            navigator.geolocation.getCurrentPosition(success, error);
-        }
+        })  
+
+        // alert user if there is no responce from OpenWeather
+        .catch(function(error) {
+            alert("Unable to connect to OpenWeather");
+        })
+};
+
+// function to handle city search form submit
+let searchSubmitHandler = function(event) {
+    // stop page from refreshing
+    event.preventDefault();
+
+    // get value from input element
+    let cityName = $("#cityname").val().trim();
+
+    // check if the search field has a value
+    if(cityName) {
+        // pass the value to getCityWeather function
+        getCityWeather(cityName);
+
+        // clear the search input
+        $("#cityname").val("");
+    } else {
+        // if nothing was entered alert the user
+        alert("Please enter a city name");
     }
-    // Get weather from user's current location
-    function getCurrentWeather(loc) {
-        // pull city history from local memory
-        let cityList = JSON.parse(localStorage.getItem("cityList")) || [];
-        //div for each history location
-        $('#past-searches').empty();
-        cityList.forEach(function (city) {
-            let cityHistoryNameDiv = $('<div>');
-            cityHistoryNameDiv.addClass("cityList");
-            cityHistoryNameDiv.attr("value", city);
-            cityHistoryNameDiv.text(city);
-            $('#past-searches').append(cityHistoryNameDiv);
+};
+
+// function to display the information collected from openweathermap.org
+let displayWeather = function(weatherData) {
+
+    // format and display the values
+    $("#main-city-name").text(weatherData.name + " (" + dayjs(weatherData.dt * 1000).format("MM/DD/YYYY") + ") ").append(`<img src="https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png"></img>`);
+    $("#main-city-temp").text("Temperature: " + weatherData.main.temp.toFixed(0) + "°C");
+    $("#main-city-humid").text("Humidity: " + weatherData.main.humidity + "%");
+    $("#main-city-wind").text("Wind Speed: " + weatherData.wind.speed.toFixed(0) + "km/h");
+
+    // use lat & lon to make the uv api call
+    fetch("https://api.openweathermap.org/data/2.5/uvi?lat=" + weatherData.coord.lat + "&lon="+ weatherData.coord.lon + "&appid=314c9841e6dc7de0c4fa4dbcf98d890d")
+        .then(function(response) {
+            response.json().then(function(data) {
+
+                // display the uv index value
+                $("#uv-box").text(data.value);
+
+                // highlight the value using the EPA's UV Index Scale colors
+                if(data.value >= 11) {
+                    $("#uv-box").css("background-color", "#6c49cb")
+                } else if (data.value < 11 && data.value >= 8) {
+                    $("#uv-box").css("background-color", "#d90011")
+                } else if (data.value < 8 && data.value >= 6) {
+                    $("#uv-box").css("background-color", "#f95901")
+                } else if (data.value < 6 && data.value >= 3) {
+                    $("#uv-box").css("background-color", "#f7e401")
+                } else {
+                    $("#uv-box").css("background-color", "#299501")
+                }      
+            })
         });
-        // reset search value to null
-        $('#city-search').val("");
-        // determine if search is based upon city name or lat/lon
-        if (typeof loc === "object") {
-            city = `lat=${loc.latitude}&lon=${loc.longitude}`;
-        } else {
-            city = `q=${loc}`;
-        }
-        // Set up Open Weather API Query - weather request
-        let currentURL = "https://api.openweathermap.org/data/2.5/weather?";
-        let cityName = city;
-        let unitsURL = "&units=metric";
-        let apiIdURL = "&appid="
-        let apiKey = "314c9841e6dc7de0c4fa4dbcf98d890d";
-        let openCurrWeatherAPI = currentURL + cityName + unitsURL + apiIdURL + apiKey;
-        // Open weather API query - weather request
-        $.ajax({
-            url: openCurrWeatherAPI,
-            method: "GET"
-        }).then(function (response1) {
-            // load result into weatherObj
-            weatherObj = {
-                city: `${response1.name}`,
-                wind: response1.wind.speed,
-                humidity: response1.main.humidity,
-                temp: Math.round(response1.main.temp),
-                // convert date to usable format [1] = MM/DD/YYYY Format
-                date: (convertDate(response1.dt)),
-                icon: `http://openweathermap.org/img/w/${response1.weather[0].icon}.png`,
-                desc: response1.weather[0].description
-            }
-            // remove the current forecast
-            $('#forecast').empty();
-            // render the current search city
-            $('#cityName').text(weatherObj.city + " (" + weatherObj.date + ")");
-            // render the current search city weather icon
-            $('#currWeathIcn').attr("src", weatherObj.icon);
-            // render the current search city temp
-            $('#currTemp').text("Temperature: " + weatherObj.temp + " " + "°C");
-            // render the current search city humidity
-            $('#currHum').text("Humidity: " + weatherObj.humidity + "%");
-            // render current city search wind speed
-            $('#currWind').text("Windspeed: " + weatherObj.wind + " MPH");
-            // get UVI from open weather
-            city = `&lat=${parseInt(response1.coord.lat)}&lon=${parseInt(response1.coord.lon)}`;
-            // Initiate API Call to get current weather
-            let uviURL = "https://api.openweathermap.org/data/2.5/uvi";
-            let apiIdURL = "?appid="
-            let apiKey = "314c9841e6dc7de0c4fa4dbcf98d890d";
-            let cityName = city;
-            let openUviWeatherAPI = uviURL + apiIdURL + apiKey + cityName;
-            // open weather call. UVI request
-            $.ajax({
-                url: openUviWeatherAPI,
-                method: "GET"
-            }).then(function (response3) {
-                // load respone into UviLevel variable
-                let UviLevel = parseFloat(response3.value);
-                // initiate background as violet
-                let backgrdColor = 'violet';
-                // determine backgrouind color depending on value
-                if (UviLevel < 3) { backgrdColor = 'green'; }
-                else if (UviLevel < 6) { backgrdColor = 'yellow'; }
-                else if (UviLevel < 8) { backgrdColor = 'orange'; }
-                else if (UviLevel < 11) { backgrdColor = 'red'; }
-                // insert UVI Label and value into HTML
-                let uviTitle = '<span>UV Index: </span>';
-                let color = uviTitle + `<span style="background-color: ${backgrdColor}; padding: 0 7px 0 7px;">${response3.value}</span>`;
-                $('#currUVI').html(color);
-            });
+
+    // five-day api call
+    fetch("https://api.openweathermap.org/data/2.5/forecast?q=" + weatherData.name + "&appid=314c9841e6dc7de0c4fa4dbcf98d890d&units=metric")
+        .then(function(response) {
+            response.json().then(function(data) {
+
+                // clear any previous entries in the five-day forecast
+                $("#five-day").empty();
+
+                // get every 8th value (24hours) in the returned array from the api call
+                for(i = 7; i <= data.list.length; i += 8){
+
+                    // insert data into my day forecast card template
+                    let fiveDayCard =`
+                    <div class="col-md-2 m-2 py-3 card text-white bg-success">
+                        <div class="card-body p-1">
+                            <h5 class="card-title">` + dayjs(data.list[i].dt * 1000).format("M/DD/YYYY") + `</h5>
+                            <img src="https://openweathermap.org/img/wn/` + data.list[i].weather[0].icon + `.png" alt="rain">
+                            <p class="card-text">Temp: ` + data.list[i].main.temp.toFixed(0) + `°C</p>
+                            <p class="card-text">Humidity: ` + data.list[i].main.humidity +`%</p>
+                        </div>
+                    </div>
+                    `;
+
+                    // append the day to the five-day forecast
+                    $("#five-day").append(fiveDayCard);
+               }
+            })
         });
+
+    // save the last city searched
+    lastCitySearched = weatherData.name;
+
+    // save to the search history using the api's name value for consistancy
+    // this also keeps searches that did not return a result from populating the array
+    saveSearchHistory(weatherData.name);
+
+    
+};
+
+// function to save the city search history to local storage
+let saveSearchHistory = function (city) {
+    if(!searchHistory.includes(city)){
+        searchHistory.push(city);
+        $("#search-history").append("<a href='#' class='list-group-item list-group-item-action' id='" + city + "'>" + city + "</a>")
+    } 
+
+    // save the searchHistory array to local storage
+    localStorage.setItem("weatherSearchHistory", JSON.stringify(searchHistory));
+
+    // save the lastCitySearched to local storage
+    localStorage.setItem("lastCitySearched", JSON.stringify(lastCitySearched));
+
+    // display the searchHistory array
+    loadSearchHistory();
+};
+
+// function to load saved city search history from local storage
+let loadSearchHistory = function() {
+    searchHistory = JSON.parse(localStorage.getItem("weatherSearchHistory"));
+    lastCitySearched = JSON.parse(localStorage.getItem("lastCitySearched"));
+  
+    // if nothing in localStorage, create an empty searchHistory array and an empty lastCitySearched string
+    if (!searchHistory) {
+        searchHistory = []
     }
-    // get weather forecast for selected city
-    function getWeatherForecast(loc) {
-        // determining the type of request.. if an object, we have lat/lon, use it
-        if (typeof loc === "object") {
-            city = `lat=${loc.latitude}&lon=${loc.longitude}`;
-            // else call api using city name
-        } else {
-            city = `q=${loc}`;
-        }
-        // Set up Open Weather API Query - weather request
-        let currentURL = "https://api.openweathermap.org/data/2.5/weather?";
-        let cityName = city;
-        let unitsURL = "&units=metric";
-        let apiIdURL = "&appid="
-        let apiKey = "314c9841e6dc7de0c4fa4dbcf98d890d";
-        let openCurrWeatherAPI2 = currentURL + cityName + unitsURL + apiIdURL + apiKey;
-        // Open weather API query - weather request
-        $.ajax({
-            url: openCurrWeatherAPI2,
-            method: "GET",
-        }).then(function (response4) {
-            // capture lat/lon for subsequent request
-            let cityLon = response4.coord.lon;
-            let cityLat = response4.coord.lat;
-            // set city with lat/long
-            city = `lat=${cityLat}&lon=${cityLon}`;
-            // Get five days of weather history using longitude and latitude
-            let weatherArr = [];
-            let weatherObj = {};
-            // Initiate API Call to get current weather... use onecall request
-            let currentURL = "https://api.openweathermap.org/data/2.5/onecall?";
-            let cityName = city;
-            let exclHrlURL = "&exclude=hourly";
-            let unitsURL = "&units=metric";
-            let apiIdURL = "&appid=";
-            let apiKey = "314c9841e6dc7de0c4fa4dbcf98d890d";
-            let openFcstWeatherAPI = currentURL + cityName + exclHrlURL + unitsURL + apiIdURL + apiKey;
-            // Open weather api
-            $.ajax({
-                url: openFcstWeatherAPI,
-                method: "GET"
-            }).then(function (response2) {
-                for (let i = 1; i < (response2.daily.length - 2); i++) {
-                    let cur = response2.daily[i]
-                    weatherObj = {
-                        weather: cur.weather[0].description,
-                        icon: `http://openweathermap.org/img/w/${cur.weather[0].icon}.png`,
-                        minTemp: Math.round(cur.temp.min),
-                        maxTemp: Math.round(cur.temp.max),
-                        humidity: cur.humidity,
-                        uvi: cur.uvi,
-                        date: (convertDate(cur.dt))
-                    }
-                    // push day to weatherArr
-                    weatherArr.push(weatherObj);
-                }
-                // renders forecast on page
-                for (let i = 0; i < weatherArr.length; i++) {
-                    let $colmx1 = $('<div class="col mx-1">');
-                    let $cardBody = $('<div class="card-body forecast-card">');
-                    let $cardTitle = $('<h6 class="card-title">');
-                    $cardTitle.text(weatherArr[i].date);
-                    // format HTML UL Tag
-                    let $ul = $('<ul>');
-                    // format HTML LI Tags
-                    let $iconLi = $('<li>');
-                    let $iconI = $('<img>');
-                    let $weathLi = $('<li>');
-                    let $tempMaxLi = $('<li>');
-                    let $tempMinLi = $('<li>');
-                    let $humLi = $('<li>');
-                    // format html values
-                    $iconI.attr('src', weatherArr[i].icon);
-                    $weathLi.text(weatherArr[i].weather);
-                    $tempMaxLi.text('Temp High: ' + weatherArr[i].maxTemp + " °C");
-                    $tempMinLi.text('Temp Low: ' + weatherArr[i].minTemp + " °C");
-                    $humLi.text('Humidity: ' + weatherArr[i].humidity + "%");
-                    // append HTML
-                    $iconLi.append($iconI);
-                    $ul.append($iconLi);
-                    $ul.append($weathLi);
-                    $ul.append($tempMaxLi);
-                    $ul.append($tempMinLi);
-                    $ul.append($humLi);
-                    $cardTitle.append($ul);
-                    $cardBody.append($cardTitle);
-                    $colmx1.append($cardBody);
-                    $('#forecast').append($colmx1);
-                }
-            });
-        });
+
+    if (!lastCitySearched) {
+        lastCitySearched = ""
     }
-    // will get location when page initializes
-    let location = establishCurrLocation();
+
+    // clear any previous values from th search-history ul
+    $("#search-history").empty();
+
+    // for loop that will run through all the citys found in the array
+    for(i = 0 ; i < searchHistory.length ;i++) {
+
+        // add the city as a link, set it's id, and append it to the search-history ul
+        $("#search-history").append("<a href='#' class='list-group-item list-group-item-action' id='" + searchHistory[i] + "'>" + searchHistory[i] + "</a>");
+    }
+  };
+
+// load search history from local storage
+loadSearchHistory();
+
+// start page with the last city searched if there is one
+if (lastCitySearched != ""){
+    getCityWeather(lastCitySearched);
+}
+
+// event handlers
+$("#search-form").submit(searchSubmitHandler);
+$("#search-history").on("click", function(event){
+    // get the links id value
+    let prevCity = $(event.target).closest("a").attr("id");
+    // pass it's id value to the getCityWeather function
+    getCityWeather(prevCity);
 });
