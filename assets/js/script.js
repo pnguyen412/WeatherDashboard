@@ -22,7 +22,7 @@ let getCityWeather = function(city) {
             }
         })  
 
-        // alert user if there is no responce from OpenWeather
+        // alert user if there is no response from OpenWeather
         .catch(function(error) {
             alert("Unable to connect to OpenWeather");
         })
@@ -38,10 +38,7 @@ let searchSubmitHandler = function(event) {
 
     // check if the search field has a value
     if(cityName) {
-        // pass the value to getCityWeather function
         getCityWeather(cityName);
-
-        // clear the search input
         $("#cityname").val("");
     } else {
         // if nothing was entered alert the user
@@ -58,7 +55,7 @@ let displayWeather = function(weatherData) {
     $("#main-city-humid").text("Humidity: " + weatherData.main.humidity + "%");
     $("#main-city-wind").text("Wind Speed: " + weatherData.wind.speed.toFixed(0) + "km/h");
 
-    // use lat & lon to make the uv api call
+    // use lat & lon to make the uv index api call
     fetch("https://api.openweathermap.org/data/2.5/uvi?lat=" + weatherData.coord.lat + "&lon="+ weatherData.coord.lon + "&appid=314c9841e6dc7de0c4fa4dbcf98d890d")
         .then(function(response) {
             response.json().then(function(data) {
@@ -66,7 +63,7 @@ let displayWeather = function(weatherData) {
                 // display the uv index value
                 $("#uv-box").text(data.value);
 
-                // highlight the value using the EPA's UV Index Scale colors
+                //display the UV index according to severity by color
                 if(data.value >= 11) {
                     $("#uv-box").css("background-color", "#6c49cb")
                 } else if (data.value < 11 && data.value >= 8) {
@@ -112,9 +109,6 @@ let displayWeather = function(weatherData) {
 
     // save the last city searched
     lastCitySearched = weatherData.name;
-
-    // save to the search history using the api's name value for consistancy
-    // this also keeps searches that did not return a result from populating the array
     saveSearchHistory(weatherData.name);
 
     
@@ -173,8 +167,6 @@ if (lastCitySearched != ""){
 // event handlers
 $("#search-form").submit(searchSubmitHandler);
 $("#search-history").on("click", function(event){
-    // get the links id value
     let prevCity = $(event.target).closest("a").attr("id");
-    // pass it's id value to the getCityWeather function
     getCityWeather(prevCity);
 });
